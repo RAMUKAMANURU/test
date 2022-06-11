@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>global.UpdateSetUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>UpdateSetUtil</name>
+        <script><![CDATA[
+var UpdateSetUtil = Class.create();
+UpdateSetUtil.prototype = {
+initialize: function() {
+},
+
+// We are concatenating several XML files, so we need to strip the XML declarations to maintain the final XML valid
+_cleanXMLBlock: function(xmlString) {
+try{
+xmlString = xmlString.replace(/<\?.*\?><sys_remote_update_set>/g,"<sys_remote_update_set action=\"INSERT_OR_UPDATE\">");
+xmlString = xmlString.replace(/<\?.*\?><sys_update_xml>/g,"<sys_update_xml action=\"INSERT_OR_UPDATE\">");
+}
+catch(e){}
+return xmlString;
+},
+
+// Copy the local update set to the retrieved update set table, as a temporary record, from where we will extract it
+copyUpdateSet: function(sysid){
+// Get current update set
+var updateSet = new GlideRecord("sys_update_set");
+updateSet.get(sysid);
+
+// Copy the update set to the retrieved update set table
+var retrievedUpdateSet = new GlideRecord('sys_remote_update_set');
+retrievedUpdateSet.initialize();
+retrievedUpdateSet.description = updateSet.description;
+retrievedUpdateSet.name = updateSet.name;
+retrievedUpdateSet.release_date = updateSet.release_date;
+retrievedUpdateSet.remote_sys_id = updateSet.sys_id;
+retrievedUpdateSet.application = updateSet.application;
+// Add scope information if needed
+var scopeGr = new GlideRecord('sys_scope');
+scopeGr.get(updateSet.application);
+if (scopeGr.isValid()) {
+retrievedUpdateSet.application_name = scopeGr.name;
+retrievedUpdateSet.application_scope = scopeGr.scope;
+retrievedUpdateSet.application_version = scopeGr.version;
+}
+retrievedUpdateSet.state = "loaded";
+
+var returnid = retrievedUpdateSet.insert();
+
+// Now iterate through all the customer updates from the original update set and create copies assigned to the new update set
+var custUpdate = new GlideRecord('sys_update_xml');
+custUpdate.addQuery('update_set', updateSet.sys_id);
+custUpdate.query();
+while(custUpdate.next()) {
+custUpdate.remote_update_set = returnid;
+custUpdate.update_set = '';
+custUpdate.insert();
+}
+
+return returnid;
+},
+
+// Delete the temporary retrieved update set record - this will also delete the associated update_xml records
+deleteUpdateSet: function(sysid){
+var gr = new GlideRecord("sys_remote_update_set");
+if (gr.get(sysid)){
+gr.deleteRecord();
+}
+},
+
+// Build the XML payload of the temporary retrieved update set
+getUpdateSetPayload: function(sysid){
+// Start building the XML output
+var outputStart = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+var unloadTag = "<unload unload_date=\"" + GlideSysDateUtil.getUMTDateTimeString() + "\">";
+var unloadClose = "</unload>";
+
+// Add a cleaned up payload of the update set record itself
+var updateSetGR = new GlideRecord("sys_remote_update_set");
+updateSetGR.get(sysid);
+var xml = new GlideRecordXMLSerializer();
+var updateSet = new String(xml.serialize(updateSetGR));
+updateSet = this._cleanXMLBlock(updateSet);
+
+var output = outputStart + unloadTag + updateSet;
+
+// Add cleaned up payloads of the all the customer updates
+var custUpdateGR = new GlideRecord("sys_update_xml");
+custUpdateGR.addQuery("remote_update_set", updateSetGR.sys_id);
+custUpdateGR.query();
+while(custUpdateGR.next()){
+var xmlString = new GlideRecordXMLSerializer();
+var custUpdate = new String(xmlString.serialize(custUpdateGR));
+custUpdate = this._cleanXMLBlock(custUpdate);
+output += custUpdate;
+}
+output += unloadClose;
+return output;
+},
+
+// Main function to copy, extract, and delete the temporary update set
+copyAndExtract: function(sysid){
+var tempSysId = this.copyUpdateSet(sysid);
+var output = this.getUpdateSetPayload(tempSysId);
+this.deleteUpdateSet(tempSysId);
+return output;
+},
+
+
+
+type: 'UpdateSetUtil'
+};
+   ]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2022-06-11 06:47:26</sys_created_on>
+        <sys_id>23c8ae0187805110454a63150cbb35a3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>UpdateSetUtil</sys_name>
+        <sys_package display_value="GitTest" source="1838a281878c1110454a63150cbb3594">1838a281878c1110454a63150cbb3594</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GitTest">1838a281878c1110454a63150cbb3594</sys_scope>
+        <sys_update_name>sys_script_include_23c8ae0187805110454a63150cbb35a3</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2022-06-11 06:47:26</sys_updated_on>
+    </sys_script_include>
+</record_update>
